@@ -1,4 +1,4 @@
-<?php 
+<?php
 session_start();
 include '../config/db.php';
 
@@ -8,23 +8,38 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] != 'admin') {
     exit();
 }
 
-// Fetch all packages from the database
-$query = "SELECT id, package_name FROM packages";
+// Fetch grades and crop names from the database and group by grade
+$query = "
+    SELECT grades.grade, crops.crop_name, COUNT(*) as count 
+    FROM grades
+    JOIN crops ON grades.crop_id = crops.id
+    GROUP BY grades.grade, crops.crop_name
+";
 $result = mysqli_query($conn, $query);
 
-// Error handling for the database query
+// Check for query errors
 if (!$result) {
     die("Error fetching data: " . mysqli_error($conn));
 }
 
 // Prepare data for the chart
-$packageNames = [];
-$packageCounts = [];
+$grades = [];
+$gradeCounts = [];
+$cropNames = [];
+$uniqueGrades = [];
 
 while ($row = mysqli_fetch_assoc($result)) {
-    $packageNames[] = $row['package_name'];
-    $packageCounts[] = 1; // Assuming each package is counted as 1
+    $grades[] = $row['grade'];
+    $gradeCounts[] = $row['count'];
+    $cropNames[] = $row['crop_name'];
+    if (!in_array($row['grade'], $uniqueGrades)) {
+        $uniqueGrades[] = $row['grade'];
+    }
 }
+
+// Prepare data for table
+$query_table = "SELECT grades.id, grades.grade, crops.crop_name FROM grades JOIN crops ON grades.crop_id = crops.id";
+$table_result = mysqli_query($conn, $query_table);
 ?>
 
 <!DOCTYPE html>
@@ -32,7 +47,7 @@ while ($row = mysqli_fetch_assoc($result)) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Packaging Dashboard</title>
+    <title>Grading Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <!-- Chart.js Library -->
 
     <style>
@@ -153,69 +168,79 @@ while ($row = mysqli_fetch_assoc($result)) {
 </head>
 <body>
     <div class="container">
-        <h1>Packaging Dashboard</h1>
-        <a href="add-package.php" class="btn">Add New Package</a>
+        <h1>Grading Dashboard</h1>
+        <a href="add-modal.php" class="btn">Add New Grade</a>
 
         <div class="chart-container" style="width: 50%; margin: auto;">
-            <canvas id="packageChart"></canvas>
+            <canvas id="gradesChart"></canvas>
         </div>
 
         <table class="table">
             <thead>
                 <tr>
                     <th>ID</th>
-                    <th>Package Name</th>
+                    <th>Grade</th>
+                    <th>Crop Name</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
-                <?php mysqli_data_seek($result, 0); // Reset pointer for reuse ?>
-                <?php while ($row = mysqli_fetch_assoc($result)): ?>
+                <?php
+                if (mysqli_num_rows($table_result) > 0):
+                    while ($row = mysqli_fetch_assoc($table_result)): ?>
+                        <tr>
+                            <td><?php echo htmlspecialchars($row['id']); ?></td>
+                            <td><?php echo htmlspecialchars($row['grade']); ?></td>
+                            <td><?php echo htmlspecialchars($row['crop_name']); ?></td>
+                            <td>
+                                <a href="edit.php?id=<?php echo htmlspecialchars($row['id']); ?>" class="btn">Edit</a>
+                                <a href="delete.php?id=<?php echo htmlspecialchars($row['id']); ?>" class="btn" onclick="return confirm('Are you sure you want to delete this grade?');">Delete</a>
+                            </td>
+                        </tr>
+                    <?php endwhile;
+                else: ?>
                     <tr>
-                        <td><?php echo $row['id']; ?></td>
-                        <td><?php echo $row['package_name']; ?></td>
-                        <td>
-                            <a href="edit-package.php?id=<?php echo $row['id']; ?>" class="btn">Edit</a>
-                            <a href="delete-package.php?id=<?php echo $row['id']; ?>" class="btn" onclick="return confirm('Are you sure you want to delete this package?');">Delete</a>
-                        </td>
+                        <td colspan="4" style="text-align: center;">No grades found.</td>
                     </tr>
-                <?php endwhile; ?>
+                <?php endif; ?>
             </tbody>
         </table>
     </div>
 
     <script>
         // Pass PHP data to JavaScript
-        const packageNames = <?php echo json_encode($packageNames); ?>;
-        const packageCounts = <?php echo json_encode($packageCounts); ?>;
+        const grades = <?php echo json_encode($grades); ?>;
+        const gradeCounts = <?php echo json_encode($gradeCounts); ?>;
+        const cropNames = <?php echo json_encode($cropNames); ?>;
+        const uniqueGrades = <?php echo json_encode($uniqueGrades); ?>;
 
-        // Generate random colors for the pie chart
-        const colors = packageNames.map(() => 
-            `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 0.6)`
-        );
-
-        // Create the Chart.js pie chart
-        const ctx = document.getElementById('packageChart').getContext('2d');
-        const packageChart = new Chart(ctx, {
-            type: 'pie',
+        // Create the Chart.js bar chart
+        const ctx = document.getElementById('gradesChart').getContext('2d');
+        const gradesChart = new Chart(ctx, {
+            type: 'bar',
             data: {
-                labels: packageNames,
-                datasets: [{
-                    data: packageCounts,
-                    backgroundColor: colors,
-                    borderColor: colors.map(color => color.replace('0.6', '1')),
+                labels: cropNames, // Use crop names as labels
+                datasets: uniqueGrades.map((grade, index) => ({
+                    label: grade,
+                    data: cropNames.map((crop, idx) => grades[idx] === grade ? gradeCounts[idx] : 0),
+                    backgroundColor: `rgba(${(index * 30) % 255}, ${(index * 60) % 255}, ${(index * 90) % 255}, 0.6)`,
+                    borderColor: `rgba(${(index * 30) % 255}, ${(index * 60) % 255}, ${(index * 90) % 255}, 1)`,
                     borderWidth: 1
-                }]
+                }))
             },
             options: {
                 responsive: true,
                 plugins: {
                     legend: {
-                        display: true,
-                        position: 'top'
+                        display: true
                     },
                     tooltip: {
                         enabled: true
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true
                     }
                 }
             }

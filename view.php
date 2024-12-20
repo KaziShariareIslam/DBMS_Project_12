@@ -7,12 +7,12 @@ if (!isset($_GET['id'])) {
     exit();
 }
 
-$package_id = $_GET['id'];
+$grade_id = $_GET['id'];
 
-// Fetch the specific package
-$query = "SELECT * FROM packages WHERE id = '$package_id'";
+// Fetch the specific grade
+$query = "SELECT * FROM grades WHERE id = '$grade_id'";
 $result = mysqli_query($conn, $query);
-$package = mysqli_fetch_assoc($result);
+$grade = mysqli_fetch_assoc($result);
 ?>
 
 <!DOCTYPE html>
@@ -20,20 +20,20 @@ $package = mysqli_fetch_assoc($result);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>View Package</title>
+    <title>View Grade</title>
     <link rel="stylesheet" href="../assets/css/styles.css">
 </head>
 <body>
     <div class="container">
-        <h1>View Package</h1>
+        <h1>View Grade</h1>
         <table class="table">
             <tr>
                 <th>ID</th>
-                <td><?php echo $package['id']; ?></td>
+                <td><?php echo $grade['id']; ?></td>
             </tr>
             <tr>
-                <th>Package Name</th>
-                <td><?php echo $package['package_name']; ?></td>
+                <th>Grade</th>
+                <td><?php echo $grade['grade']; ?></td>
             </tr>
         </table>
     </div>
